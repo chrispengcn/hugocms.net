@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hugo博客文章发布系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- 引入 TinyMCE 编辑器 -->
+    <script src="./tinymce/tinymce.min.js" referrerpolicy="origin"></script>
+    
+    <!-- Tailwind配置 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#64748b',
+                        accent: '#0ea5e9',
+                        neutral: '#f8fafc',
+                        'neutral-dark': '#1e293b'
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .editor-container {
+                @apply grid grid-cols-1 lg:grid-cols-2 gap-4 h-[500px];
+            }
+            .form-input-focus {
+                @apply focus:ring-2 focus:ring-primary/50 focus:border-primary focus:outline-none;
+            }
+            .btn-primary {
+                @apply bg-primary hover:bg-primary/90 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105;
+            }
+            .btn-secondary {
+                @apply bg-secondary hover:bg-secondary/90 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105;
+            }
+            .toolbar {
+                @apply flex flex-wrap gap-2 py-2;
+            }
+            .toolbar-html {
+                @apply bg-blue-50 border-t border-gray-200;
+            }
+            .dropdown-menu {
+                @apply absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 hidden;
+            }
+            .dropdown-item {
+                @apply block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100;
+            }
+            .menu-button {
+                @apply relative inline-block text-gray-600 hover:text-primary transition-colors px-2 py-1 rounded hover:bg-gray-100;
+            }
+            .editor-tab {
+                @apply px-4 py-2 rounded-t-lg border-b-2 cursor-pointer transition-all font-medium;
+            }
+            .editor-tab.active {
+                @apply border-primary text-primary;
+            }
+            .editor-tab:not(.active) {
+                @apply border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50;
+            }
+            .editor-content {
+                @apply border border-gray-300 rounded-lg overflow-hidden;
+            }
+            .editor-panel {
+                @apply h-full;
+            }
+            .preview-panel {
+                @apply h-full border border-gray-300 rounded-lg p-4 overflow-auto;
+            }
+        }
+    </style>
+</head>
+<body class="font-inter bg-gray-50 text-gray-800">
+    <!-- 导航栏 -->
+    <nav class="bg-white shadow-md sticky top-0 z-50 transition-all duration-300">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fa fa-pencil-square-o text-primary text-2xl"></i>
+                <h1 class="text-xl font-bold text-primary">Hugo博客发布系统</h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <!-- 新增的View菜单 -->
+                <div class="menu-button" id="view-menu">
+                    <i class="fa fa-eye mr-1"></i>View
+                    <div class="dropdown-menu" id="view-dropdown">
+                        <a href="#" class="dropdown-item" id="source-code-option">
+                            <i class="fa fa-code mr-1"></i>Source Code
+                        </a>
+                    </div>
+                </div>
+                
+                <button id="theme-toggle" class="p-2 rounded-full hover:bg-gray-100 transition-colors">
+                    <i class="fa fa-moon-o text-gray-600"></i>
+                </button>
+                <a href="#" class="hidden md:block text-gray-600 hover:text-primary transition-colors">
+                    <i class="fa fa-question-circle mr-1"></i>帮助
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容 -->
+    <main class="container mx-auto px-4 py-8">
+        <!-- 状态通知 -->
+        <div id="notification" class="fixed top-20 right-4 max-w-sm rounded-lg shadow-lg p-4 transform transition-all duration-500 translate-x-full opacity-0 z-50"></div>
+        
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <!-- 操作按钮 - 移至第一行 -->
+            <div class="flex flex-wrap gap-4 justify-end mb-6">
+                <button type="button" id="reset-form" class="btn-secondary">
+                    <i class="fa fa-refresh mr-1"></i>重置
+                </button>
+                <button type="submit" form="blog-form" class="btn-primary">
+                    <i class="fa fa-save mr-1"></i>发布文章
+                </button>
+            </div>
+            
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fa fa-file-text-o text-primary mr-2"></i>
+                新建博客文章
+            </h2>
+            
+            <form id="blog-form" class="space-y-6">
+                <!-- 基本信息 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="title" class="block text-sm font-medium text-gray-700 mb-1">标题</label>
+                        <input type="text" id="title" name="title" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus transition-all"
+                            placeholder="输入文章标题">
+                    </div>
+                    
+                    <div>
+                        <label for="slug" class="block text-sm font-medium text-gray-700 mb-1">友好链接 Slug</label>
+                        <input type="text" id="slug" name="slug" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus transition-all"
+                            placeholder="自动生成（英文小写，连字符分隔）">
+                    </div>
+                    
+                    <div>
+                        <label for="categories" class="block text-sm font-medium text-gray-700 mb-1">分类</label>
+                        <input type="text" id="categories" name="categories" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus transition-all"
+                            placeholder="输入文章分类（用逗号分隔多个分类）">
+                    </div>
+                    
+                    <div>
+                        <label for="tags" class="block text-sm font-medium text-gray-700 mb-1">标签</label>
+                        <input type="text" id="tags" name="tags" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus transition-all"
+                            placeholder="输入文章标签（用逗号分隔多个标签）">
+                    </div>
+                    
+                    <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="featureImage" class="block text-sm font-medium text-gray-700 mb-1">特色图片URL</label>
+                            <input type="url" id="featureImage" name="featureImage" required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus transition-all"
+                                placeholder="输入特色图片的URL">
+                        </div>
+                        
+                        <div>
+                            <label for="date" class="block text-sm font-medium text-gray-700 mb-1">发布日期</label>
+                            <input type="text" id="date" name="date" required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus transition-all"
+                                placeholder="YYYY-MM-DD"
+                                value="2025-06-24">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 编辑器切换标签 -->
+                <div class="editor-content">
+                    <div class="toolbar">
+                        <button id="wysiwyg-tab" class="editor-tab active">
+                            <i class="fa fa-eye mr-1"></i>所见即所得
+                        </button>
+                        <button id="source-tab" class="editor-tab">
+                            <i class="fa fa-code mr-1"></i>源码编辑
+                        </button>
+                        <button id="preview-tab" class="editor-tab">
+                            <i class="fa fa-newspaper-o mr-1"></i>预览
+                        </button>
+                    </div>
+                    
+                    <!-- 所见即所得编辑器 -->
+                    <div id="wysiwyg-editor" class="editor-panel">
+                        <textarea id="content" name="content" rows="10" required
+                            class="flex-grow w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus transition-all resize-none"
+                            placeholder="输入文章内容"></textarea>
+                    </div>
+                    
+                    <!-- 源码编辑器 -->
+                    <div id="source-editor" class="editor-panel hidden">
+                        <textarea id="source-content" name="source-content" rows="10"
+                            class="flex-grow w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus transition-all resize-none font-mono"
+                            placeholder="编辑HTML源码"></textarea>
+                    </div>
+                    
+                    <!-- 预览面板 -->
+                    <div id="preview-panel" class="preview-panel hidden">
+                        <div id="preview-content" class="prose max-w-none"></div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Markdown文件预览 -->
+        <div id="markdown-preview-container" class="bg-white rounded-xl shadow-lg p-6 mb-8 hidden">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fa fa-code text-primary mr-2"></i>
+                Markdown文件预览
+            </h2>
+            <div class="bg-gray-800 text-gray-100 rounded-lg p-4 overflow-auto max-h-[400px] font-mono text-sm">
+                <pre id="markdown-content"></pre>
+            </div>
+            <!-- 预览区域的按钮 -->
+            <div class="mt-4 flex justify-end">
+                <button id="close-preview" class="btn-secondary">
+                    <i class="fa fa-times mr-1"></i>关闭预览
+                </button>
+                <button id="save-markdown" class="btn-primary ml-2">
+                    <i class="fa fa-download mr-1"></i>保存文件
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 - 使用相对定位 -->
+    <footer class="bg-white border-t border-gray-200 py-4">
+        <div class="container mx-auto px-4 text-center text-gray-600 text-sm">
+            <p>© 2025 Hugo博客发布系统 | 设计与开发</p>
+        </div>
+    </footer>
+
+    <script>
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', function() {
+            // 主题切换
+            const themeToggle = document.getElementById('theme-toggle');
+            const htmlElement = document.documentElement;
+            
+            // 检查用户偏好的主题
+            if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                htmlElement.classList.add('dark');
+                themeToggle.innerHTML = '<i class="fa fa-sun-o text-yellow-500"></i>';
+            } else {
+                htmlElement.classList.remove('dark');
+                themeToggle.innerHTML = '<i class="fa fa-moon-o text-gray-600"></i>';
+            }
+            
+            // 主题切换事件
+            themeToggle.addEventListener('click', function() {
+                if (htmlElement.classList.contains('dark')) {
+                    htmlElement.classList.remove('dark');
+                    localStorage.theme = 'light';
+                    themeToggle.innerHTML = '<i class="fa fa-moon-o text-gray-600"></i>';
+                } else {
+                    htmlElement.classList.add('dark');
+                    localStorage.theme = 'dark';
+                    themeToggle.innerHTML = '<i class="fa fa-sun-o text-yellow-500"></i>';
+                }
+            });
+            
+            // View菜单功能
+            const viewMenu = document.getElementById('view-menu');
+            const viewDropdown = document.getElementById('view-dropdown');
+            
+            viewMenu.addEventListener('click', function(e) {
+                e.stopPropagation();
+                viewDropdown.classList.toggle('hidden');
+            });
+            
+            // 点击其他地方关闭菜单
+            document.addEventListener('click', function() {
+                viewDropdown.classList.add('hidden');
+            });
+            
+            // Source Code选项功能
+            const sourceCodeOption = document.getElementById('source-code-option');
+            sourceCodeOption.addEventListener('click', function(e) {
+                e.preventDefault();
+                // 这里可以添加查看源代码的功能实现
+                showNotification('查看源代码功能已触发', 'info');
+            });
+            
+            // 编辑器标签切换
+            const wysiwygTab = document.getElementById('wysiwyg-tab');
+            const sourceTab = document.getElementById('source-tab');
+            const previewTab = document.getElementById('preview-tab');
+            const wysiwygEditor = document.getElementById('wysiwyg-editor');
+            const sourceEditor = document.getElementById('source-editor');
+            const previewPanel = document.getElementById('preview-panel');
+            const contentEditor = document.getElementById('content');
+            const sourceContent = document.getElementById('source-content');
+            const previewContent = document.getElementById('preview-content');
+            
+            // 初始化TinyMCE编辑器
+            let tinyMceEditor;
+            tinymce.init({
+                selector: '#content',
+                plugins: 'advlist autolink lists link image charmap print preview anchor searchreplace visualblocks code fullscreen insertdatetime media table paste code help wordcount',
+                toolbar: 'undo redo | styleselect | bold italic | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link image | code preview',
+                height: 400,
+                setup: function(editor) {
+                    tinyMceEditor = editor;
+                    editor.on('change', function() {
+                        syncEditors();
+                    });
+                }
+            });
+            
+            // 标签切换事件
+            wysiwygTab.addEventListener('click', function() {
+                setActiveTab(wysiwygTab);
+                wysiwygEditor.classList.remove('hidden');
+                sourceEditor.classList.add('hidden');
+                previewPanel.classList.add('hidden');
+                syncEditors('toWysiwyg');
+            });
+            
+            sourceTab.addEventListener('click', function() {
+                setActiveTab(sourceTab);
+                wysiwygEditor.classList.add('hidden');
+                sourceEditor.classList.remove('hidden');
+                previewPanel.classList.add('hidden');
+                syncEditors('toSource');
+            });
+            
+            previewTab.addEventListener('click', function() {
+                setActiveTab(previewTab);
+                wysiwygEditor.classList.add('hidden');
+                sourceEditor.classList.add('hidden');
+                previewPanel.classList.remove('hidden');
+                syncEditors('toPreview');
+            });
+            
+            // 源码编辑器内容变化时同步
+            sourceContent.addEventListener('input', function() {
+                if (sourceTab.classList.contains('active')) {
+                    syncEditors('fromSource');
+                }
+            });
+            
+            // 设置活动标签
+            function setActiveTab(tab) {
+                [wysiwygTab, sourceTab, previewTab].forEach(t => {
+                    t.classList.remove('active');
+                });
+                tab.classList.add('active');
+            }
+            
+            // 同步编辑器内容
+            function syncEditors(direction) {
+                if (!tinyMceEditor) return;
+                
+                if (direction === 'toSource' || direction === undefined) {
+                    // 从WYSIWYG同步到源码
+                    sourceContent.value = tinyMceEditor.getContent();
+                } else if (direction === 'toWysiwyg' || direction === undefined) {
+                    // 从源码同步到WYSIWYG
+                    if (!tinyMceEditor.isHidden()) {
+                        tinyMceEditor.setContent(sourceContent.value);
+                    }
+                } else if (direction === 'fromSource') {
+                    // 源码编辑器内容变化时同步到WYSIWYG和预览
+                    tinyMceEditor.setContent(sourceContent.value);
+                    previewContent.innerHTML = sourceContent.value;
+                } else if (direction === 'toPreview') {
+                    // 同步到预览
+                    previewContent.innerHTML = tinyMceEditor.getContent();
+                }
+            }
+            
+            // 自动生成Slug
+            const titleInput = document.getElementById('title');
+            const slugInput = document.getElementById('slug');
+            
+            titleInput.addEventListener('input', function() {
+                if (!slugInput.value || slugInput.dataset.autoGenerated === 'true') {
+                    const slug = this.value.toLowerCase()
+                        .replace(/[^\w\s-]/g, '')
+                        .replace(/[\s_-]+/g, '-')
+                        .replace(/^-+|-+$/g, '');
+                    
+                    slugInput.value = slug;
+                    slugInput.dataset.autoGenerated = 'true';
+                }
+            });
+            
+            slugInput.addEventListener('input', function() {
+                this.dataset.autoGenerated = 'false';
+            });
+            
+            // 表单提交
+            const blogForm = document.getElementById('blog-form');
+            blogForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // 获取当前编辑器内容
+                let content;
+                if (wysiwygTab.classList.contains('active')) {
+                    content = tinyMceEditor.getContent();
+                } else if (sourceTab.classList.contains('active')) {
+                    content = sourceContent.value;
+                }
+                
+                // 收集表单数据
+                const formData = new FormData(this);
+                const blogData = {};
+                
+                formData.forEach((value, key) => {
+                    blogData[key] = value;
+                });
+                
+                // 设置文章内容
+                blogData.content = content;
+                
+                // 处理分类和标签
+                blogData.categories = blogData.categories.split(',').map(cat => cat.trim()).filter(Boolean);
+                blogData.tags = blogData.tags.split(',').map(tag => tag.trim()).filter(Boolean);
+                
+                // 生成Markdown内容
+                const markdownContent = generateMarkdown(blogData);
+                
+                // 显示Markdown预览
+                document.getElementById('markdown-content').textContent = markdownContent;
+                document.getElementById('markdown-preview-container').classList.remove('hidden');
+                
+                // 滚动到预览区域
+                document.getElementById('markdown-preview-container').scrollIntoView({ behavior: 'smooth' });
+                
+                // 保存文章
+                saveArticle(blogData, markdownContent);
+            });
+            
+            // 关闭预览
+            document.getElementById('close-preview').addEventListener('click', function() {
+                document.getElementById('markdown-preview-container').classList.add('hidden');
+            });
+            
+            // 重置表单
+            document.getElementById('reset-form').addEventListener('click', function() {
+                blogForm.reset();
+                
+                // 重置编辑器
+                if (tinyMceEditor) {
+                    tinyMceEditor.setContent('');
+                }
+                sourceContent.value = '';
+                previewContent.innerHTML = '';
+                
+                // 设置默认日期
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                const day = String(today.getDate()).padStart(2, '0');
+                document.getElementById('date').value = `${year}-${month}-${day}`;
+                
+                // 切换回WYSIWYG模式
+                setActiveTab(wysiwygTab);
+                wysiwygEditor.classList.remove('hidden');
+                sourceEditor.classList.add('hidden');
+                previewPanel.classList.add('hidden');
+            });
+            
+            // 保存Markdown文件
+            document.getElementById('save-markdown').addEventListener('click', function() {
+                const markdownContent = document.getElementById('markdown-content').textContent;
+                const blogData = JSON.parse(localStorage.getItem('tempBlogData'));
+                
+                if (blogData && markdownContent) {
+                    const blob = new Blob([markdownContent], { type: 'text/markdown' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `${blogData.slug}.md`;
+                    a.click();
+                    
+                    showNotification('文件已成功保存！', 'success');
+                }
+            });
+        });
+        
+        // 生成Markdown内容
+        function generateMarkdown(data) {
+            const frontMatter = `---
+title: "${data.title}"
+date: ${data.date}
+draft: false
+slug: "${data.slug}"
+categories: [${data.categories.map(cat => `"${cat}"`).join(', ')}]
+tags: [${data.tags.map(tag => `"${tag}"`).join(', ')}]
+featureImage: "${data.featureImage}"
+permalink: /${data.slug}/
+---
+
+${data.content}`;
+            
+            return frontMatter;
+        }
+        
+        // 保存文章
+        function saveArticle(blogData, markdownContent) {
+            // 在实际应用中，这里会发送数据到服务器
+            // 为了演示，我们将数据存储在localStorage中
+            localStorage.setItem('tempBlogData', JSON.stringify(blogData));
+            
+            // 模拟API请求
+            fetch('/save-article', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    filename: `${blogData.slug}.md`,
+                    content: markdownContent
+                })
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showNotification('文章已成功发布！', 'success');
+                } else {
+                    showNotification('发布文章时出错：' + result.message, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('网络错误，请重试', 'error');
+                console.error('Error:', error);
+            });
+        }
+        
+        // 显示通知
+        function showNotification(message, type = 'info') {
+            const notification = document.getElementById('notification');
+            let bgColor, icon;
+            
+            switch(type) {
+                case 'success':
+                    bgColor = 'bg-green-500';
+                    icon = 'fa-check-circle';
+                    break;
+                case 'error':
+                    bgColor = 'bg-red-500';
+                    icon = 'fa-exclamation-circle';
+                    break;
+                case 'warning':
+                    bgColor = 'bg-yellow-500';
+                    icon = 'fa-exclamation-triangle';
+                    break;
+                default:
+                    bgColor = 'bg-blue-500';
+                    icon = 'fa-info-circle';
+            }
+            
+            notification.className = `fixed top-20 right-4 max-w-sm rounded-lg shadow-lg p-4 transform transition-all duration-500 translate-x-full opacity-0 z-50 ${bgColor} text-white`;
+            notification.innerHTML = `<i class="fa ${icon} mr-2"></i>${message}`;
+            
+            // 显示通知
+            setTimeout(() => {
+                notification.classList.remove('translate-x-full', 'opacity-0');
+            }, 100);
+            
+            // 自动隐藏通知
+            setTimeout(() => {
+                notification.classList.add('translate-x-full', 'opacity-0');
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
+    

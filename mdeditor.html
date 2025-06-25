@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hugo博客文章发布系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.2.12/marked.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind配置 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#64748b',
+                        accent: '#0ea5e9',
+                        neutral: '#f8fafc',
+                        'neutral-dark': '#1e293b'
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .editor-container {
+                @apply grid grid-cols-1 lg:grid-cols-2 gap-4 h-[500px];
+            }
+            .form-input-focus {
+                @apply focus:ring-2 focus:ring-primary/50 focus:border-primary focus:outline-none;
+            }
+            .btn-primary {
+                @apply bg-primary hover:bg-primary/90 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105;
+            }
+            .btn-secondary {
+                @apply bg-secondary hover:bg-secondary/90 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105;
+            }
+            .markdown-preview h2 {
+                @apply text-2xl font-bold mt-6 mb-3 text-neutral-dark;
+            }
+            .markdown-preview h3 {
+                @apply text-xl font-semibold mt-4 mb-2 text-neutral-dark/90;
+            }
+            .markdown-preview p {
+                @apply mb-4 text-neutral-dark/80 leading-relaxed;
+            }
+            .markdown-preview ul {
+                @apply list-disc pl-5 mb-4 text-neutral-dark/80;
+            }
+            .markdown-preview img {
+                @apply rounded-lg shadow-md my-4 max-w-full h-auto;
+            }
+            .markdown-preview a {
+                @apply text-primary hover:underline;
+            }
+            .toolbar {
+                @apply flex flex-wrap gap-2 py-2;
+            }
+            .toolbar-html {
+                @apply bg-blue-50 border-t border-gray-200;
+            }
+        }
+    </style>
+</head>
+<body class="font-inter bg-gray-50 text-gray-800">
+    <!-- 导航栏 -->
+    <nav class="bg-white shadow-md sticky top-0 z-50 transition-all duration-300">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fa fa-pencil-square-o text-primary text-2xl"></i>
+                <h1 class="text-xl font-bold text-primary">Hugo博客发布系统</h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button id="theme-toggle" class="p-2 rounded-full hover:bg-gray-100 transition-colors">
+                    <i class="fa fa-moon-o text-gray-600"></i>
+                </button>
+                <a href="#" class="hidden md:block text-gray-600 hover:text-primary transition-colors">
+                    <i class="fa fa-question-circle mr-1"></i>帮助
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容 -->
+    <main class="container mx-auto px-4 py-8">
+        <!-- 状态通知 -->
+        <div id="notification" class="fixed top-20 right-4 max-w-sm rounded-lg shadow-lg p-4 transform transition-all duration-500 translate-x-full opacity-0 z-50"></div>
+        
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <!-- 操作按钮 - 移至第一行 -->
+            <div class="flex flex-wrap gap-4 justify-end mb-6">
+                <button type="button" id="reset-form" class="btn-secondary">
+                    <i class="fa fa-refresh mr-1"></i>重置
+                </button>
+                <button type="submit" form="blog-form" class="btn-primary">
+                    <i class="fa fa-save mr-1"></i>发布文章
+                </button>
+            </div>
+            
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fa fa-file-text-o text-primary mr-2"></i>
+                新建博客文章
+            </h2>
+            
+            <form id="blog-form" class="space-y-6">
+                <!-- 基本信息 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="title" class="block text-sm font-medium text-gray-700 mb-1">标题</label>
+                        <input type="text" id="title" name="title" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus transition-all"
+                            placeholder="输入文章标题">
+                    </div>
+                    
+                    <div>
+                        <label for="slug" class="block text-sm font-medium text-gray-700 mb-1">友好链接 Slug</label>
+                        <input type="text" id="slug" name="slug" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus transition-all"
+                            placeholder="自动生成（英文小写，连字符分隔）">
+                    </div>
+                    
+                    <div>
+                        <label for="categories" class="block text-sm font-medium text-gray-700 mb-1">分类</label>
+                        <input type="text" id="categories" name="categories" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus transition-all"
+                            placeholder="输入文章分类（用逗号分隔多个分类）">
+                    </div>
+                    
+                    <div>
+                        <label for="tags" class="block text-sm font-medium text-gray-700 mb-1">标签</label>
+                        <input type="text" id="tags" name="tags" required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus transition-all"
+                            placeholder="输入文章标签（用逗号分隔多个标签）">
+                    </div>
+                    
+                    <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="featureImage" class="block text-sm font-medium text-gray-700 mb-1">特色图片URL</label>
+                            <input type="url" id="featureImage" name="featureImage" required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus transition-all"
+                                placeholder="输入特色图片的URL">
+                        </div>
+                        
+                        <div>
+                            <label for="date" class="block text-sm font-medium text-gray-700 mb-1">发布日期</label>
+                            <input type="text" id="date" name="date" required
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg form-input-focus transition-all"
+                                placeholder="YYYY-MM-DD"
+                                value="2025-06-24">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Markdown编辑器 -->
+                <div>
+                    <label for="content" class="block text-sm font-medium text-gray-700 mb-1">文章内容</label>
+                    <div class="editor-container">
+                        <div class="flex flex-col h-full">
+                            <div class="bg-gray-50 border border-gray-300 rounded-t-lg px-4">
+                                <span class="font-medium text-gray-700">编辑区</span>
+                                <!-- Markdown工具栏 -->
+                                <div class="toolbar">
+                                    <button type="button" class="text-gray-600 hover:text-primary transition-colors px-2 py-1 rounded hover:bg-gray-100" data-action="heading" title="标题">
+                                        <i class="fa fa-header"></i>
+                                    </button>
+                                    <button type="button" class="text-gray-600 hover:text-primary transition-colors px-2 py-1 rounded hover:bg-gray-100" data-action="bold" title="粗体">
+                                        <i class="fa fa-bold"></i>
+                                    </button>
+                                    <button type="button" class="text-gray-600 hover:text-primary transition-colors px-2 py-1 rounded hover:bg-gray-100" data-action="italic" title="斜体">
+                                        <i class="fa fa-italic"></i>
+                                    </button>
+                                    <button type="button" class="text-gray-600 hover:text-primary transition-colors px-2 py-1 rounded hover:bg-gray-100" data-action="list" title="列表">
+                                        <i class="fa fa-list-ul"></i>
+                                    </button>
+                                    <button type="button" class="text-gray-600 hover:text-primary transition-colors px-2 py-1 rounded hover:bg-gray-100" data-action="link" title="链接">
+                                        <i class="fa fa-link"></i>
+                                    </button>
+                                    <button type="button" class="text-gray-600 hover:text-primary transition-colors px-2 py-1 rounded hover:bg-gray-100" data-action="image" title="图片">
+                                        <i class="fa fa-image"></i>
+                                    </button>
+                                </div>
+                                <!-- HTML工具栏 -->
+                                <div class="toolbar toolbar-html">
+                                    <button type="button" class="text-gray-600 hover:text-blue-600 transition-colors px-2 py-1 rounded hover:bg-blue-100" data-action="html" title="插入HTML代码">
+                                        <i class="fa fa-code"></i>
+                                    </button>
+                                    <button type="button" class="text-gray-600 hover:text-blue-600 transition-colors px-2 py-1 rounded hover:bg-blue-100" data-action="p" title="插入<p>标签">
+                                        &lt;p&gt;
+                                    </button>
+                                    <button type="button" class="text-gray-600 hover:text-blue-600 transition-colors px-2 py-1 rounded hover:bg-blue-100" data-action="ol" title="插入<ol>标签">
+                                        &lt;ol&gt;
+                                    </button>
+                                    <button type="button" class="text-gray-600 hover:text-blue-600 transition-colors px-2 py-1 rounded hover:bg-blue-100" data-action="ul" title="插入<ul>标签">
+                                        &lt;ul&gt;
+                                    </button>
+                                    <button type="button" class="text-gray-600 hover:text-blue-600 transition-colors px-2 py-1 rounded hover:bg-blue-100" data-action="img" title="插入<img>标签">
+                                        &lt;img&gt;
+                                    </button>
+                                    <button type="button" class="text-gray-600 hover:text-blue-600 transition-colors px-2 py-1 rounded hover:bg-blue-100" data-action="a" title="插入<a>标签">
+                                        &lt;a&gt;
+                                    </button>
+                                    <button type="button" class="text-gray-600 hover:text-blue-600 transition-colors px-2 py-1 rounded hover:bg-blue-100" data-action="table" title="插入<table>标签">
+                                        &lt;table&gt;
+                                    </button>
+                                </div>
+                            </div>
+                            <textarea id="content" name="content" rows="10" required
+                                class="flex-grow w-full px-4 py-2 border-x border-b border-gray-300 rounded-b-lg form-input-focus transition-all resize-none"
+                                placeholder="输入文章内容（支持Markdown语法）"></textarea>
+                        </div>
+                        
+                        <div class="flex flex-col h-full">
+                            <div class="bg-gray-50 border border-gray-300 rounded-t-lg px-4 py-2">
+                                <span class="font-medium text-gray-700">预览区</span>
+                            </div>
+                            <div id="preview" class="flex-grow w-full p-4 border-x border-b border-gray-300 rounded-b-lg overflow-auto markdown-preview bg-white"></div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Markdown文件预览 -->
+        <div id="markdown-preview-container" class="bg-white rounded-xl shadow-lg p-6 mb-8 hidden">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fa fa-code text-primary mr-2"></i>
+                Markdown文件预览
+            </h2>
+            <div class="bg-gray-800 text-gray-100 rounded-lg p-4 overflow-auto max-h-[400px] font-mono text-sm">
+                <pre id="markdown-content"></pre>
+            </div>
+            <!-- 预览区域的按钮 -->
+            <div class="mt-4 flex justify-end">
+                <button id="close-preview" class="btn-secondary">
+                    <i class="fa fa-times mr-1"></i>关闭预览
+                </button>
+                <button id="save-markdown" class="btn-primary ml-2">
+                    <i class="fa fa-download mr-1"></i>保存文件
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 - 使用相对定位 -->
+    <footer class="bg-white border-t border-gray-200 py-4">
+        <div class="container mx-auto px-4 text-center text-gray-600 text-sm">
+            <p>© 2025 Hugo博客发布系统 | 设计与开发</p>
+        </div>
+    </footer>
+
+    <script>
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', function() {
+            // 主题切换
+            const themeToggle = document.getElementById('theme-toggle');
+            const htmlElement = document.documentElement;
+            
+            // 检查用户偏好的主题
+            if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                htmlElement.classList.add('dark');
+                themeToggle.innerHTML = '<i class="fa fa-sun-o text-yellow-500"></i>';
+            } else {
+                htmlElement.classList.remove('dark');
+                themeToggle.innerHTML = '<i class="fa fa-moon-o text-gray-600"></i>';
+            }
+            
+            // 主题切换事件
+            themeToggle.addEventListener('click', function() {
+                if (htmlElement.classList.contains('dark')) {
+                    htmlElement.classList.remove('dark');
+                    localStorage.theme = 'light';
+                    themeToggle.innerHTML = '<i class="fa fa-moon-o text-gray-600"></i>';
+                } else {
+                    htmlElement.classList.add('dark');
+                    localStorage.theme = 'dark';
+                    themeToggle.innerHTML = '<i class="fa fa-sun-o text-yellow-500"></i>';
+                }
+            });
+            
+            // Markdown预览
+            const contentTextarea = document.getElementById('content');
+            const previewDiv = document.getElementById('preview');
+            
+            // 更新预览
+            function updatePreview() {
+                const content = contentTextarea.value;
+                previewDiv.innerHTML = marked.parse(content);
+            }
+            
+            // 初始预览
+            updatePreview();
+            
+            // 输入时更新预览
+            contentTextarea.addEventListener('input', updatePreview);
+            
+            // Markdown工具栏功能
+            const toolbarButtons = document.querySelectorAll('[data-action]');
+            
+            toolbarButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const action = this.getAttribute('data-action');
+                    const textarea = document.getElementById('content');
+                    const start = textarea.selectionStart;
+                    const end = textarea.selectionEnd;
+                    const selectedText = textarea.value.substring(start, end);
+                    
+                    let replacement = '';
+                    
+                    switch(action) {
+                        // Markdown按钮
+                        case 'heading':
+                            replacement = `## ${selectedText || '标题'}\n\n`;
+                            break;
+                        case 'bold':
+                            replacement = `**${selectedText || '粗体文本'}**`;
+                            break;
+                        case 'italic':
+                            replacement = `*${selectedText || '斜体文本'}*`;
+                            break;
+                        case 'list':
+                            replacement = `- ${selectedText || '列表项'}\n- `;
+                            break;
+                        case 'link':
+                            replacement = `[${selectedText || '链接文本'}](https://example.com)`;
+                            break;
+                        case 'image':
+                            replacement = `![${selectedText || '图片描述'}](https://picsum.photos/800/400)`;
+                            break;
+                        // HTML按钮
+                        case 'html':
+                            replacement = `<div class="custom-html">${selectedText || 'HTML代码'}</div>`;
+                            break;
+                        case 'p':
+                            replacement = `<p>${selectedText || '段落文本'}</p>`;
+                            break;
+                        case 'ol':
+                            replacement = `<ol>\n  <li>${selectedText || '列表项'}</li>\n  <li>第二项</li>\n</ol>`;
+                            break;
+                        case 'ul':
+                            replacement = `<ul>\n  <li>${selectedText || '列表项'}</li>\n  <li>第二项</li>\n</ul>`;
+                            break;
+                        case 'img':
+                            replacement = `<img src="${selectedText || 'https://picsum.photos/800/400'}" alt="${selectedText || '图片描述'}" class="img-responsive" />`;
+                            break;
+                        case 'a':
+                            replacement = `<a href="${selectedText || 'https://example.com'}" target="_blank">${selectedText || '链接文本'}</a>`;
+                            break;
+                        case 'table':
+                            replacement = `
+<table class="w-full border-collapse">
+  <tr>
+    <th class="border p-2">表头1</th>
+    <th class="border p-2">表头2</th>
+  </tr>
+  <tr>
+    <td class="border p-2">内容1</td>
+    <td class="border p-2">内容2</td>
+  </tr>
+</table>`.trim();
+                            break;
+                    }
+                    
+                    // 插入文本
+                    textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
+                    
+                    // 设置光标位置
+                    const newCursorPos = start + replacement.length;
+                    if (selectedText) {
+                        // 如果有选中的文本，将光标放在插入内容之后
+                        textarea.setSelectionRange(newCursorPos, newCursorPos);
+                    } else {
+                        // 如果没有选中的文本，将光标放在标签内合适的位置
+                        let cursorOffset = 0;
+                        
+                        switch(action) {
+                            case 'img':
+                                cursorOffset = replacement.indexOf('alt="') + 5;
+                                break;
+                            case 'a':
+                                cursorOffset = replacement.indexOf('>') + 1;
+                                break;
+                            case 'html':
+                            case 'p':
+                                cursorOffset = replacement.indexOf('>') + 1;
+                                break;
+                            default:
+                                cursorOffset = newCursorPos;
+                        }
+                        
+                        if (cursorOffset > 0 && cursorOffset < replacement.length) {
+                            textarea.setSelectionRange(start + cursorOffset, start + cursorOffset);
+                        } else {
+                            textarea.setSelectionRange(newCursorPos, newCursorPos);
+                        }
+                    }
+                    
+                    textarea.focus();
+                    
+                    // 更新预览
+                    updatePreview();
+                });
+            });
+            
+            // 自动生成Slug
+            const titleInput = document.getElementById('title');
+            const slugInput = document.getElementById('slug');
+            
+            titleInput.addEventListener('input', function() {
+                if (!slugInput.value || slugInput.dataset.autoGenerated === 'true') {
+                    const slug = this.value.toLowerCase()
+                        .replace(/[^\w\s-]/g, '')
+                        .replace(/[\s_-]+/g, '-')
+                        .replace(/^-+|-+$/g, '');
+                    
+                    slugInput.value = slug;
+                    slugInput.dataset.autoGenerated = 'true';
+                }
+            });
+            
+            slugInput.addEventListener('input', function() {
+                this.dataset.autoGenerated = 'false';
+            });
+            
+            // 表单提交
+            const blogForm = document.getElementById('blog-form');
+            blogForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // 收集表单数据
+                const formData = new FormData(this);
+                const blogData = {};
+                
+                formData.forEach((value, key) => {
+                    blogData[key] = value;
+                });
+                
+                // 处理分类和标签
+                blogData.categories = blogData.categories.split(',').map(cat => cat.trim()).filter(Boolean);
+                blogData.tags = blogData.tags.split(',').map(tag => tag.trim()).filter(Boolean);
+                
+                // 生成Markdown内容
+                const markdownContent = generateMarkdown(blogData);
+                
+                // 显示Markdown预览
+                document.getElementById('markdown-content').textContent = markdownContent;
+                document.getElementById('markdown-preview-container').classList.remove('hidden');
+                
+                // 滚动到预览区域
+                document.getElementById('markdown-preview-container').scrollIntoView({ behavior: 'smooth' });
+                
+                // 保存文章
+                saveArticle(blogData, markdownContent);
+            });
+            
+            // 关闭预览
+            document.getElementById('close-preview').addEventListener('click', function() {
+                document.getElementById('markdown-preview-container').classList.add('hidden');
+            });
+            
+            // 重置表单
+            document.getElementById('reset-form').addEventListener('click', function() {
+                blogForm.reset();
+                
+                // 设置默认日期
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                const day = String(today.getDate()).padStart(2, '0');
+                document.getElementById('date').value = `${year}-${month}-${day}`;
+                
+                updatePreview();
+            });
+            
+            // 保存Markdown文件
+            document.getElementById('save-markdown').addEventListener('click', function() {
+                const markdownContent = document.getElementById('markdown-content').textContent;
+                const blogData = JSON.parse(localStorage.getItem('tempBlogData'));
+                
+                if (blogData && markdownContent) {
+                    const blob = new Blob([markdownContent], { type: 'text/markdown' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `${blogData.slug}.md`;
+                    a.click();
+                    
+                    showNotification('文件已成功保存！', 'success');
+                }
+            });
+        });
+        
+        // 生成Markdown内容
+        function generateMarkdown(data) {
+            const frontMatter = `---
+title: "${data.title}"
+date: ${data.date}
+draft: false
+slug: "${data.slug}"
+categories: [${data.categories.map(cat => `"${cat}"`).join(', ')}]
+tags: [${data.tags.map(tag => `"${tag}"`).join(', ')}]
+featureImage: "${data.featureImage}"
+permalink: /${data.slug}/
+---
+
+${data.content}`;
+            
+            return frontMatter;
+        }
+        
+        // 保存文章
+        function saveArticle(blogData, markdownContent) {
+            // 在实际应用中，这里会发送数据到服务器
+            // 为了演示，我们将数据存储在localStorage中
+            localStorage.setItem('tempBlogData', JSON.stringify(blogData));
+            
+            // 模拟API请求
+            fetch('/save-article', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    filename: `${blogData.slug}.md`,
+                    content: markdownContent
+                })
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showNotification('文章已成功发布！', 'success');
+                } else {
+                    showNotification('发布文章时出错：' + result.message, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('网络错误，请重试', 'error');
+                console.error('Error:', error);
+            });
+        }
+        
+        // 显示通知
+        function showNotification(message, type = 'info') {
+            const notification = document.getElementById('notification');
+            let bgColor, icon;
+            
+            switch(type) {
+                case 'success':
+                    bgColor = 'bg-green-500';
+                    icon = 'fa-check-circle';
+                    break;
+                case 'error':
+                    bgColor = 'bg-red-500';
+                    icon = 'fa-exclamation-circle';
+                    break;
+                case 'warning':
+                    bgColor = 'bg-yellow-500';
+                    icon = 'fa-exclamation-triangle';
+                    break;
+                default:
+                    bgColor = 'bg-blue-500';
+                    icon = 'fa-info-circle';
+            }
+            
+            notification.className = `fixed top-20 right-4 max-w-sm rounded-lg shadow-lg p-4 transform transition-all duration-500 translate-x-full opacity-0 z-50 ${bgColor} text-white`;
+            notification.innerHTML = `<i class="fa ${icon} mr-2"></i>${message}`;
+            
+            // 显示通知
+            setTimeout(() => {
+                notification.classList.remove('translate-x-full', 'opacity-0');
+            }, 100);
+            
+            // 自动隐藏通知
+            setTimeout(() => {
+                notification.classList.add('translate-x-full', 'opacity-0');
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
